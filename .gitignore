@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+
+# Database
+*.db
+
+# ML model and data
+backend/ml/model.pkl
+backend/ml/data/
+
+# Node
+node_modules/
+worker/node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
