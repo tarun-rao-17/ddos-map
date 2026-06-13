@@ -9,7 +9,8 @@ __pycache__/
 
 # ML model and data
 backend/ml/model.pkl
-backend/ml/data/
+backend/ml/data/*.csv
+!backend/ml/data/sample_training.csv
 
 # Node
 node_modules/
