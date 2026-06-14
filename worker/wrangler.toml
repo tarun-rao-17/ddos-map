@@ -1,0 +1,7 @@
+name = "ddos-sensor"
+main = "src/index.js"
+compatibility_date = "2024-06-01"
+
+[vars]
+FASTAPI_URL = "https://ddos-map-tmua.onrender.com/ingest"
+WORKER_SECRET = "tommy"

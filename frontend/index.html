@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DDoS Live Attack Map</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #0a0a0f;
+      color: #e0e0e0;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── SIDEBAR ── */
+    #sidebar {
+      width: 320px;
+      min-width: 320px;
+      background: #111118;
+      border-right: 1px solid #1e1e2e;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    #sidebar-header {
+      padding: 20px 16px 14px;
+      border-bottom: 1px solid #1e1e2e;
+    }
+
+    #sidebar-header h1 {
+      font-size: 15px;
+      font-weight: 600;
+      color: #ffffff;
+      letter-spacing: 0.5px;
+    }
+
+    #sidebar-header p {
+      font-size: 11px;
+      color: #555570;
+      margin-top: 3px;
+    }
+
+    /* ── STATS ── */
+    #stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      padding: 12px;
+      border-bottom: 1px solid #1e1e2e;
+    }
+
+    .stat-card {
+      background: #16161f;
+      border-radius: 8px;
+      padding: 10px 12px;
+      border: 1px solid #1e1e2e;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: #555570;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    .stat-value {
+      font-size: 22px;
+      font-weight: 600;
+      color: #ffffff;
+      margin-top: 2px;
+    }
+
+    .stat-value.red   { color: #ff4444; }
+    .stat-value.amber { color: #ffaa00; }
+    .stat-value.green { color: #44dd88; }
+
+    /* ── CONNECTION STATUS ── */
+    #conn-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      font-size: 11px;
+      color: #555570;
+      border-bottom: 1px solid #1e1e2e;
+    }
+
+    #conn-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: #333;
+    }
+
+    #conn-dot.live   { background: #44dd88; box-shadow: 0 0 6px #44dd88; }
+    #conn-dot.dead   { background: #ff4444; }
+
+    /* ── EVENT FEED ── */
+    #feed-title {
+      padding: 10px 12px 6px;
+      font-size: 10px;
+      color: #555570;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+    }
+
+    #feed {
+      flex: 1;
+      overflow-y: auto;
+      padding: 0 8px 8px;
+    }
+
+    #feed::-webkit-scrollbar { width: 4px; }
+    #feed::-webkit-scrollbar-track { background: transparent; }
+    #feed::-webkit-scrollbar-thumb { background: #2a2a3e; border-radius: 2px; }
+
+    .event-card {
+      background: #16161f;
+      border: 1px solid #1e1e2e;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: border-color 0.15s;
+    }
+
+    .event-card:hover { border-color: #3a3a5e; }
+
+    .event-card.flagged {
+      border-left: 3px solid #ff4444;
+    }
+
+    .event-card.suspicious {
+      border-left: 3px solid #ffaa00;
+    }
+
+    .event-card.safe {
+      border-left: 3px solid #44dd88;
+    }
+
+    .event-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 5px;
+    }
+
+    .event-ip {
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+      font-family: monospace;
+    }
+
+    .event-time {
+      font-size: 10px;
+      color: #555570;
+    }
+
+    .event-meta {
+      font-size: 11px;
+      color: #888899;
+      line-height: 1.5;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 1px 7px;
+      border-radius: 99px;
+      font-size: 10px;
+      font-weight: 600;
+      margin-right: 4px;
+    }
+
+    .badge-red    { background: #2d0a0a; color: #ff4444; }
+    .badge-amber  { background: #2d1f00; color: #ffaa00; }
+    .badge-green  { background: #0a2d18; color: #44dd88; }
+    .badge-gray   { background: #1e1e2e; color: #888899; }
+
+    /* ── MAP ── */
+    #map {
+      flex: 1;
+      background: #0d0d14;
+    }
+
+    /* leaflet dark tiles */
+    .leaflet-tile-pane { filter: brightness(0.6) saturate(0.4) hue-rotate(200deg); }
+
+    /* ── TOOLTIP ── */
+    #tooltip {
+      position: fixed;
+      background: #111118;
+      border: 1px solid #2a2a3e;
+      border-radius: 10px;
+      padding: 12px 14px;
+      font-size: 12px;
+      color: #e0e0e0;
+      pointer-events: none;
+      display: none;
+      z-index: 9999;
+      max-width: 260px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h1>⚡ DDoS Live Map</h1>
+    <p>Real-time attack monitoring</p>
+  </div>
+
+  <div id="stats">
+    <div class="stat-card">
+      <div class="stat-label">Total Events</div>
+      <div class="stat-value" id="stat-total">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Flagged</div>
+      <div class="stat-value red" id="stat-flagged">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Countries</div>
+      <div class="stat-value amber" id="stat-countries">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Live Feed</div>
+      <div class="stat-value green" id="stat-live">0</div>
+    </div>
+  </div>
+
+  <div id="conn-status">
+    <div id="conn-dot"></div>
+    <span id="conn-text">Connecting...</span>
+  </div>
+
+  <div id="feed-title">Live Event Feed</div>
+  <div id="feed"></div>
+</div>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<!-- TOOLTIP -->
+<div id="tooltip"></div>
+
+<script>
+const BACKEND = "https://ddos-map-tmua.onrender.com";
+const WS_URL  = "wss://ddos-map-tmua.onrender.com/live-feed";
+
+// ── counters ──
+let totalEvents   = 0;
+let flaggedEvents = 0;
+let liveEvents    = 0;
+const countries   = new Set();
+
+// ── init map ──
+const map = L.map("map", { zoomControl: true }).setView([20, 0], 2);
+
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  attribution: "© OpenStreetMap",
+  maxZoom: 18,
+}).addTo(map);
+
+// ── helpers ──
+function getColor(event) {
+  if (event.flagged)                    return "#ff4444";
+  if (event.ddos_confidence > 0.4)      return "#ffaa00";
+  return "#44dd88";
+}
+
+function getCardClass(event) {
+  if (event.flagged)                    return "flagged";
+  if (event.ddos_confidence > 0.4)      return "suspicious";
+  return "safe";
+}
+
+function timeAgo(ts) {
+  const diff = Math.floor((Date.now() - new Date(ts)) / 1000);
+  if (diff < 60)  return `${diff}s ago`;
+  if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+  return `${Math.floor(diff/3600)}h ago`;
+}
+
+function formatScore(n) {
+  return (n * 100).toFixed(0) + "%";
+}
+
+// ── plot marker on map ──
+function plotMarker(event) {
+  if (!event.latitude || !event.longitude) return;
+
+  const color  = getColor(event);
+  const radius = event.flagged ? 10 : 6;
+
+  const circle = L.circleMarker([event.latitude, event.longitude], {
+    radius,
+    fillColor:   color,
+    color:       color,
+    weight:      1,
+    opacity:     0.9,
+    fillOpacity: 0.6,
+  }).addTo(map);
+
+  // pulse animation for flagged events
+  if (event.flagged) {
+    const pulse = L.circleMarker([event.latitude, event.longitude], {
+      radius: radius + 8,
+      fillColor: "transparent",
+      color,
+      weight: 1,
+      opacity: 0.3,
+    }).addTo(map);
+    setTimeout(() => map.removeLayer(pulse), 2000);
+  }
+
+  // tooltip on hover
+  circle.on("mouseover", (e) => {
+    const tip = document.getElementById("tooltip");
+    tip.style.display = "block";
+    tip.innerHTML = `
+      <strong style="color:#fff">${event.ip}</strong><br>
+      ${event.city ? event.city + ", " : ""}${event.country}<br>
+      <span style="color:#888">ASN: ${event.asn_org || "unknown"}</span><br>
+      <span style="color:#888">URL: ${event.url.substring(0, 40)}...</span><br>
+      ML confidence: <strong style="color:${getColor(event)}">${formatScore(event.ddos_confidence)}</strong><br>
+      Abuse score: <strong style="color:${getColor(event)}">${event.abuse_score}</strong>
+    `;
+  });
+
+  circle.on("mousemove", (e) => {
+    const tip = document.getElementById("tooltip");
+    tip.style.left = (e.originalEvent.clientX + 14) + "px";
+    tip.style.top  = (e.originalEvent.clientY + 14) + "px";
+  });
+
+  circle.on("mouseout", () => {
+    document.getElementById("tooltip").style.display = "none";
+  });
+}
+
+// ── add event card to sidebar feed ──
+function addEventCard(event) {
+  const color = getColor(event);
+  const feed  = document.getElementById("feed");
+
+  const card = document.createElement("div");
+  card.className = `event-card ${getCardClass(event)}`;
+  card.innerHTML = `
+    <div class="event-top">
+      <span class="event-ip">${event.ip}</span>
+      <span class="event-time">${timeAgo(event.timestamp)}</span>
+    </div>
+    <div class="event-meta">
+      ${event.city ? event.city + ", " : ""}${event.country}
+      &nbsp;·&nbsp; ${event.method}
+      &nbsp;·&nbsp; ${event.asn_org || "unknown ASN"}
+    </div>
+    <div style="margin-top:5px">
+      <span class="badge ${event.flagged ? "badge-red" : "badge-green"}">
+        ${event.flagged ? "ATTACK" : "CLEAN"}
+      </span>
+      <span class="badge badge-gray">ML ${formatScore(event.ddos_confidence)}</span>
+      <span class="badge badge-gray">Abuse ${event.abuse_score}</span>
+    </div>
+  `;
+
+  card.addEventListener("click", () => {
+    if (event.latitude && event.longitude) {
+      map.flyTo([event.latitude, event.longitude], 8, { duration: 1 });
+    }
+  });
+
+  feed.insertBefore(card, feed.firstChild);
+
+  // keep feed max 50 cards
+  while (feed.children.length > 50) {
+    feed.removeChild(feed.lastChild);
+  }
+}
+
+// ── update stats ──
+function updateStats(event) {
+  totalEvents++;
+  liveEvents++;
+  if (event.flagged)  flaggedEvents++;
+  if (event.country)  countries.add(event.country);
+
+  document.getElementById("stat-total").textContent    = totalEvents;
+  document.getElementById("stat-flagged").textContent  = flaggedEvents;
+  document.getElementById("stat-countries").textContent = countries.size;
+  document.getElementById("stat-live").textContent     = liveEvents;
+}
+
+// ── process one event ──
+function processEvent(event) {
+  plotMarker(event);
+  addEventCard(event);
+  updateStats(event);
+}
+
+// ── load history on page load ──
+async function loadHistory() {
+  try {
+    const res    = await fetch(`${BACKEND}/history`);
+    const data   = await res.json();
+    const events = data.events || [];
+
+    // plot oldest first so newest appears on top
+    events.reverse().forEach(processEvent);
+    console.log(`Loaded ${events.length} historical events`);
+  } catch (err) {
+    console.error("History load failed:", err);
+  }
+}
+
+// ── websocket for live events ──
+function connectWebSocket() {
+  const dot  = document.getElementById("conn-dot");
+  const text = document.getElementById("conn-text");
+
+  const ws = new WebSocket(WS_URL);
+
+  ws.onopen = () => {
+    dot.className  = "live";
+    text.textContent = "Live — connected";
+    console.log("WebSocket connected");
+  };
+
+  ws.onmessage = (msg) => {
+    try {
+      const event = JSON.parse(msg.data);
+      processEvent(event);
+    } catch (e) {
+      console.error("Bad WS message:", e);
+    }
+  };
+
+  ws.onclose = () => {
+    dot.className  = "dead";
+    text.textContent = "Disconnected — reconnecting...";
+    // auto reconnect after 3 seconds
+    setTimeout(connectWebSocket, 3000);
+  };
+
+  ws.onerror = (err) => {
+    console.error("WebSocket error:", err);
+    ws.close();
+  };
+}
+
+// ── boot ──
+loadHistory();
+connectWebSocket();
+</script>
+</body>
+</html>
